@@ -124,7 +124,7 @@
     <value>\w*\s+enum\s+(?&lt;name1&gt;\w+)\s+{(?&lt;body&gt;[^}]+)}(?&lt;name2&gt;[^;]*);</value>
   </data>
   <data name="find_function" xml:space="preserve">
-    <value>(?&lt;func_type&gt;[\w+\s+]+)(?&lt;func_name&gt;\s+\w+)\s*\((?&lt;func_args&gt;[^\)]+)\)\s*;</value>
+    <value>(?&lt;func_type&gt;[\w+\s+]+)(?&lt;func_name&gt;\s+\w+)\s*\((?&lt;func_para&gt;[^\)]+)\)\s*;</value>
   </data>
   <data name="find_helpstring" xml:space="preserve">
     <value>helpstring\(\"(?&lt;value&gt;[^\"]+)\"\)</value>
@@ -138,4 +138,13 @@
   <data name="find_uuid" xml:space="preserve">
     <value>uuid\((?&lt;value&gt;[^\)]+)\)</value>
   </data>
+  <data name="find_func_para1" xml:space="preserve">
+    <value>\[*(?&lt;attr&gt;[^\]]*)\]*\s*(?&lt;type&gt;[\w+\s+]+)\s+(?&lt;ptr&gt;\**)(?&lt;name&gt;\w+)</value>
+  </data> 
+  <data name="find_func_para2" xml:space="preserve">
+    <value>(?&lt;type&gt;[\w+\s+]+)(?&lt;ptr&gt;\**)(?&lt;name&gt;\w+)</value>
+  </data> 
+  <data name="find_func_attr" xml:space="preserve">
+    <value>\[(?&lt;attr&gt;[^\]]+)\](?&lt;para&gt;.*)</value>
+  </data>   
 </root>
