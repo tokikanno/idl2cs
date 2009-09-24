@@ -153,4 +153,10 @@
   <data name="find_include" xml:space="preserve">
     <value>#include\s+"(?&lt;filename&gt;[^"]+)"</value>
   </data>
+  <data name="find_fwd_interface" xml:space="preserve">
+    <value>interface\s+(?&lt;name&gt;\w+);</value>
+  </data>
+  <data name="find_whole_line_comment" xml:space="preserve">
+    <value>\s+//[^\r\n]+[\r\n]</value>
+  </data>
 </root>

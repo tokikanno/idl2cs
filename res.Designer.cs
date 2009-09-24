@@ -124,6 +124,15 @@ namespace idl2cs {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to interface\s+(?&lt;name&gt;\w+);.
+        /// </summary>
+        internal static string find_fwd_interface {
+            get {
+                return ResourceManager.GetString("find_fwd_interface", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to helpstring\(\&quot;(?&lt;value&gt;[^\&quot;]+)\&quot;\).
         /// </summary>
         internal static string find_helpstring {
@@ -165,6 +174,15 @@ namespace idl2cs {
         internal static string find_uuid {
             get {
                 return ResourceManager.GetString("find_uuid", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to \s+//[^\r\n]+[\r\n].
+        /// </summary>
+        internal static string find_whole_line_comment {
+            get {
+                return ResourceManager.GetString("find_whole_line_comment", resourceCulture);
             }
         }
     }

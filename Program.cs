@@ -5,16 +5,617 @@ using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
-#if USE_DOM
 using System.CodeDom;
 using System.CodeDom.Compiler;
-#endif
 
 namespace idl2cs
 {
+    enum E_TextMarkerType
+    {
+        None,
+        Comment,
+        Attr,
+        Para,
+        Bracket1,
+        Bracket2,
+        Bracket3,
+        Word,
+    }
+
+    enum E_ParseStatus
+    {
+        None,
+        WaitAttrTitle,
+    }
+
+    class BasicScanner
+    {
+        public delegate int OnMarkerDelegate(string txt, TextMarker marker);
+        public OnMarkerDelegate OnMarker;
+
+        public void BasicScan(string in_txt, int start)
+        {
+            int p = start;
+            int len = in_txt.Length;
+            TextMarker m = null;
+            while (p < len)
+            {
+                char c = in_txt[p];
+                if (c == '/')
+                {
+                    if (p + 1 < in_txt.Length)
+                    {
+                        char c2 = in_txt[p + 1];
+                        if (c2 == '*')
+                            m = TextMarker.ScanComment1(in_txt, p + 1);
+                        else if (c2 == '/')
+                            m = TextMarker.ScanComment2(in_txt, p + 1);
+                        else
+                            p++;
+                    }
+                }
+                else if (Char.IsLetter(c) || Char.IsNumber(c) || c == '_')
+                {
+                    m = TextMarker.ScanToNonWord(in_txt, p);
+                }
+                else if (c == '[')
+                {
+                    m = TextMarker.ScanChar(in_txt, p, ']', E_TextMarkerType.Bracket2);
+                }
+                else if (c == '(')
+                {
+                    m = TextMarker.ScanChar(in_txt, p, ')', E_TextMarkerType.Bracket1);
+                }
+                else if (c == '{')
+                {
+                    m = TextMarker.ScanBracket3(in_txt, p);
+                }
+                else
+                    p++;
+
+                if (m != null)
+                {
+                    if (OnMarker != null)
+                        p = OnMarker(in_txt, m);
+                    else
+                        p = m.GetEndPos;
+                    m = null;
+                }
+            }
+        }
+    }
+
+    class TextMarker
+    {
+        // /* */ type
+        public static TextMarker ScanComment1(string in_txt, int start)
+        {
+            int length = in_txt.Length;
+            int p = start + 1;
+
+            while (p < length)
+            {
+                if (in_txt[p] == '*')
+                    if (p + 1 < length)
+                        if (in_txt[p + 1] == '/')
+                        {
+                            p++;
+                            return new TextMarker(start - 1, p - start + 2, E_TextMarkerType.Comment);
+                        }
+                p++;
+            }
+            return null;
+        }
+        // // type
+        public static TextMarker ScanComment2(string in_txt, int start)
+        {
+            int length = in_txt.Length;
+            int p = start + 1;
+
+            while (p < length)
+            {
+                if (in_txt[p] == '\r' || in_txt[p] == '\n')
+                    return new TextMarker(start - 1, p - start + 1, E_TextMarkerType.Comment);
+                p++;
+            }
+
+            return null;
+        }
+
+        public static TextMarker ScanBracket3(string in_txt, int start)
+        {
+            int length = in_txt.Length;
+            int p = start;
+            char[] scan = new char[] { '{', '}' };
+
+            while (p < length)
+            {
+                TextMarker m = ScanChars(in_txt, p, scan, E_TextMarkerType.Bracket3);
+                if (m == null)
+                    return null;
+                else
+                {
+                    p = m.Index + m.Length - 1;
+                    if (in_txt[p] == '{')
+                    {
+                        m = ScanBracket3(in_txt, p);
+                        if (m == null)
+                            return null;
+                        else
+                            p = m.Index + m.Length;
+                    }
+                    else if (in_txt[p] == '}')
+                    {
+                        return new TextMarker(start, m.Index + m.Length - start, E_TextMarkerType.Bracket3);
+                    }
+                    else
+                        return null;
+                }
+            }
+
+            return null;
+        }
+
+        public static TextMarker ScanChar(string in_txt, int start, char scan, E_TextMarkerType type)
+        {
+            int length = in_txt.Length;
+            int p = start + 1;
+
+            while (p < length)
+            {
+                if (in_txt[p] == scan)
+                    return new TextMarker(start, p - start + 1, type);
+                p++;
+            }
+
+            return null;
+        }
+
+        public static TextMarker ScanNextWord(string in_txt, int start)
+        {
+            int length = in_txt.Length;
+            int p = start + 1;
+
+            while (p < length)
+            {
+                char c = in_txt[p];
+                if (Char.IsLetter(c) || Char.IsNumber(c) || c == '_')
+                    return new TextMarker(start, p - start, E_TextMarkerType.Word);
+                p++;
+            }
+
+            return null;
+        }
+
+        public static TextMarker ScanChars(string in_txt, int start, char[] scan, E_TextMarkerType type)
+        {
+            int length = in_txt.Length;
+            int p = start + 1;
+
+            while (p < length)
+            {
+                char c = in_txt[p];
+                foreach (char s in scan)
+                {
+                    if (c == s)
+                        return new TextMarker(start, p - start + 1, type);
+                }
+                p++;
+            }
+
+            return null;
+        }
+
+        public static TextMarker ScanToNonWord(string in_txt, int start)
+        {
+            int length = in_txt.Length;
+            int p = start + 1;
+
+            while (p < length)
+            {
+                char c = in_txt[p];
+                if (!Char.IsLetter(c) && !Char.IsNumber(c) && c != '_')
+                    return new TextMarker(start, p - start, E_TextMarkerType.Word);
+                p++;
+            }
+
+            return null;
+        }
+
+        public int Index;
+        public int Length;
+        public E_TextMarkerType Type;
+        public TextMarker(int in_index, int in_length, E_TextMarkerType in_type)
+        {
+            Index = in_index;
+            Length = in_length;
+            Type = in_type;
+        }
+        public string GetString(string in_txt)
+        {
+            string result = string.Empty;
+            try
+            {
+                result = in_txt.Substring(Index, Length);
+            }
+            catch
+            {
+            }
+            return result;
+        }
+        public int GetEndPos { get { return Index + Length - 1; } }
+    }
+
+    class TextMarkerList :  List<TextMarker>
+    {
+        private string _text;
+        public TextMarkerList(string in_text)
+        {
+            _text = in_text;
+        }
+
+        public string GetTextByMarker(TextMarker in_marker)
+        {
+            try
+            {
+                return _text.Substring(in_marker.Index, in_marker.Length);
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
+        }
+    }
+
     class Program
     {
+        #region Load regular expression from resrouce
+        public static System.Resources.ResourceManager rm = new System.Resources.ResourceManager("idl2cs.res", Assembly.GetExecutingAssembly());
+        public static Regex find_enum = new Regex(rm.GetString("find_enum"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_typedef = new Regex(rm.GetString("find_typedef"), RegexOptions.Compiled | RegexOptions.Singleline);
+        public static Regex find_interface = new Regex(rm.GetString("find_interface"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_function = new Regex(rm.GetString("find_function"), RegexOptions.Compiled | RegexOptions.Multiline);
+        //Regex find_comment = new Regex(rm.GetString("find_comment"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_uuid = new Regex(rm.GetString("find_uuid"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_helpstring = new Regex(rm.GetString("find_helpstring"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_func_attr = new Regex(rm.GetString("find_func_attr"), RegexOptions.Compiled | RegexOptions.Singleline);
+        public static Regex find_coclass = new Regex(rm.GetString("find_coclass"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_include = new Regex(rm.GetString("find_include"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_fwd_interface = new Regex(rm.GetString("find_fwd_interface"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_whole_line_comment = new Regex(rm.GetString("find_whole_line_comment"), RegexOptions.Compiled | RegexOptions.Multiline);
+        #endregion
+
+        static E_ParseStatus status = E_ParseStatus.None;
+        static TextMarker attr_block = null;
+        static Dictionary<CodeCompileUnit, string> code_unit_list = new Dictionary<CodeCompileUnit, string>();
+
+        static bool ProcessInclude(ref string org_txt)
+        {
+            Match m = find_include.Match(org_txt);
+            if (m.Success)
+            {
+                try
+                {
+                    string inc = File.ReadAllText(m.Groups["filename"].Value);
+                    if (!string.IsNullOrEmpty(inc))
+                    {
+                        while (ProcessInclude(ref inc)) { }
+                        org_txt = org_txt.Remove(m.Captures[0].Index, m.Captures[0].Length).Insert(m.Captures[0].Index, inc);
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+
+            return m.Success;
+        }
+
+        static void ProcessIncludeLoop(ref string org_txt)
+        {
+            while (ProcessInclude(ref org_txt)) { }
+        }
+
+        static void RemoveWholeLineComment(ref string org_txt)
+        {
+            org_txt = find_whole_line_comment.Replace(org_txt, "");
+        }
+
+        static Dictionary<string, int> PrepareCommandDic()
+        {
+            Dictionary<string, int> result = new Dictionary<string, int>();
+
+            result.Add("import", 0);
+            result.Add("interface", 0);
+            result.Add("library", 0);
+            result.Add("typedef", 0);
+            result.Add("enum", 0);
+
+            return result;
+        }
+
+        static int OnMarker(string txt, TextMarker m)
+        {
+            int p = m.GetEndPos;
+            switch (m.Type)
+            {
+                case E_TextMarkerType.Attr:
+                    break;
+                case E_TextMarkerType.Para:
+                    break;
+                case E_TextMarkerType.Bracket1:
+                    break;
+                case E_TextMarkerType.Bracket2:
+                    status = E_ParseStatus.WaitAttrTitle;
+                    attr_block = m;
+                    break;
+                case E_TextMarkerType.Bracket3:
+                    break;
+                case E_TextMarkerType.Word:
+                    string cmd = m.GetString(txt);
+
+                    if (status == E_ParseStatus.WaitAttrTitle)
+                    {
+                        if (cmd == "library")
+                        {
+                            TextMarker library_block = null;
+
+                            library_block = TextMarker.ScanNextWord(txt, p);
+                            if (library_block == null)
+                                throw new Exception("Fail parse library block."); 
+
+                            library_block = TextMarker.ScanToNonWord(txt, library_block.GetEndPos);
+                            if (library_block == null)
+                                throw new Exception("Fail parse library block.");
+
+                            string lib_name = library_block.GetString(txt);
+
+                            library_block = TextMarker.ScanChar(txt, p, '{', E_TextMarkerType.None);
+                            if (library_block == null)
+                                throw new Exception("Fail parse library block."); 
+
+                            library_block = TextMarker.ScanBracket3(txt, library_block.GetEndPos);
+                            if (library_block == null)
+                                throw new Exception("Fail parse library block."); 
+
+                            CodeCompileUnit cu = ProcessLibraryBlock(attr_block.GetString(txt), lib_name, library_block.GetString(txt));
+
+                            if (cu != null)
+                                code_unit_list.Add(cu, lib_name);
+
+                            status = E_ParseStatus.None;
+                            attr_block = null;
+                            p = library_block.GetEndPos;
+                        }
+                    }
+                    else if (status == E_ParseStatus.None)
+                    {
+                        if (cmd == "import")
+                        {
+                            m = TextMarker.ScanChar(txt, p, ';', E_TextMarkerType.None);
+                            p = m.Index + m.Length;
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+
+            return p;
+        }
+
+        static void DoConvert(string in_filename)
+        {
+            if (!File.Exists(in_filename))
+            {
+                Console.WriteLine("{0} not exists.", in_filename);
+                return;
+            }
+
+            string out_filename = Path.ChangeExtension(in_filename, ".cs");
+            try
+            {
+                string idl = File.ReadAllText(in_filename);
+                while (ProcessInclude(ref idl)) { }
+                TextMarkerList markers = new TextMarkerList(idl);
+
+                int p = 0;
+                TextMarker m = null;
+                TextMarker attr = null;
+
+                BasicScanner scan = new BasicScanner();
+                scan.OnMarker = new BasicScanner.OnMarkerDelegate(OnMarker);
+                scan.BasicScan(idl, 0);
+
+                foreach (KeyValuePair<CodeCompileUnit, string> pair in code_unit_list)
+                {
+                    WriteCode(pair.Key, Path.Combine(Path.GetDirectoryName(out_filename), pair.Value + ".cs"));
+                }
+                return;
+
+                while (p < idl.Length)
+                {
+                    char c = idl[p];
+                    if (c == '/')
+                    {
+                        if (p + 1 < idl.Length)
+                        {
+                            char c2 = idl[p + 1];
+                            if (c2 == '*')
+                                m = TextMarker.ScanComment1(idl, p + 1);
+                            else if (c2 == '/')
+                                m = TextMarker.ScanComment2(idl, p + 1);
+                        }
+                    }
+                    else if (Char.IsLetter(c) || Char.IsNumber(c) || c == '_')
+                    {
+                        m = TextMarker.ScanToNonWord(idl, p);
+                    }
+                    else if (c == '[')
+                    {
+                        m = TextMarker.ScanChar(idl, p, ']', E_TextMarkerType.Bracket2);
+                    }
+                    else if (c == '(')
+                    {
+                        m = TextMarker.ScanChar(idl, p, ')', E_TextMarkerType.Bracket1);
+                    }
+                    else if (c == '{')
+                    {
+                        m = TextMarker.ScanBracket3(idl, p);
+                    }
+                    else
+                        p++;
+              
+                    if (m != null)
+                    {
+                        Console.WriteLine("[{0}] '{1}'", m.Type, m.GetString(idl));
+                        p = m.Index + m.Length;
+
+                        switch (m.Type)
+                        {
+                            case E_TextMarkerType.Attr:
+                                break;
+                            case E_TextMarkerType.Para:
+                                break;
+                            case E_TextMarkerType.Bracket1:
+                                break;
+                            case E_TextMarkerType.Bracket2:
+                                status = E_ParseStatus.WaitAttrTitle;
+                                attr = m;
+                                break;
+                            case E_TextMarkerType.Bracket3:
+                                break;
+                            case E_TextMarkerType.Word:
+                                string cmd = m.GetString(idl);
+
+                                if (status == E_ParseStatus.WaitAttrTitle)
+                                {
+                                    if (cmd == "library")
+                                    {
+                                        TextMarker library_block = null;
+
+                                        library_block = TextMarker.ScanNextWord(idl, p);
+                                        if (library_block == null)
+                                        {
+                                            Console.WriteLine("Fail parse library block.");
+                                            return;
+                                        }
+
+                                        library_block = TextMarker.ScanToNonWord(idl, library_block.GetEndPos);
+                                        if (library_block == null)
+                                        {
+                                            Console.WriteLine("Fail parse library block.");
+                                            return;
+                                        }
+                                        string lib_name = library_block.GetString(idl);
+
+                                        library_block = TextMarker.ScanChar(idl, p, '{', E_TextMarkerType.None);
+                                        if (library_block == null)
+                                        {
+                                            Console.WriteLine("Fail parse library block.");
+                                            return;
+                                        }
+
+                                        library_block = TextMarker.ScanBracket3(idl, library_block.GetEndPos);
+                                        if (library_block == null)
+                                        {
+                                            Console.WriteLine("Fail parse library block.");
+                                            return;
+                                        }
+
+                                        CodeCompileUnit cu = ProcessLibraryBlock(attr.GetString(idl), lib_name, library_block.GetString(idl));
+
+                                        if (cu != null)
+                                            WriteCode(cu, Path.Combine(Path.GetDirectoryName(out_filename), lib_name + ".cs"));
+
+                                        status = E_ParseStatus.None;
+                                        attr = null;
+                                        p = library_block.GetEndPos;
+                                    }
+                                }
+                                else if (status == E_ParseStatus.None)
+                                {
+                                    if (cmd == "import")
+                                    {
+                                        m = TextMarker.ScanChar(idl, p, ';', E_TextMarkerType.None);
+                                        p = m.Index + m.Length;
+                                    }
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                      
+                        m = null;
+                    }
+                }
+
+                
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return;
+            }
+            finally
+            {
+            }
+        }
+
+        private static bool WriteCode(CodeCompileUnit unit, string filename)
+        {
+            try
+            {
+                StreamWriter code_writer = new StreamWriter(filename);
+
+                Microsoft.CSharp.CSharpCodeProvider code_provider = new Microsoft.CSharp.CSharpCodeProvider();
+                CodeGeneratorOptions code_opts = new CodeGeneratorOptions();
+                code_opts.BlankLinesBetweenMembers = false;
+                code_opts.VerbatimOrder = true;
+                code_opts.BracingStyle = "C";
+                code_provider.GenerateCodeFromCompileUnit(unit, code_writer, code_opts);
+                code_writer.Close();
+
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static CodeCompileUnit ProcessLibraryBlock(string attr, string cmd, string block)
+        {
+            CodeCompileUnit r = new CodeCompileUnit();
+            CodeNamespace import = new CodeNamespace();
+            import.Imports.Add(new CodeNamespaceImport("System"));
+            import.Imports.Add(new CodeNamespaceImport("System.Runtime.InteropServices"));
+            r.Namespaces.Add(import);
+
+            CodeNamespace code = new CodeNamespace(cmd);
+            r.Namespaces.Add(code);
+
+            Match lib_help_string = find_helpstring.Match(attr);
+            if (lib_help_string.Success)
+                code.Comments.Add(new CodeCommentStatement(lib_help_string.Groups["value"].Value));
+
+            return r;
+        }
+
+        static Dictionary<string, int> dic_command = PrepareCommandDic();
+
         static void Main(string[] args)
+        {
+            if (args.Length != 1)
+            {
+                Console.WriteLine("Usage:\n\t{0} <idl file>", Path.GetFileName(Environment.GetCommandLineArgs()[0]));
+                return;
+            }
+
+            DoConvert(args[0]);
+        }
+
+        static void MainOld(string[] args)
         {
             if (args.Length != 1)
             {
@@ -39,34 +640,9 @@ namespace idl2cs
                     return;
                 }
 
-                #region Load regular expression from resrouce
-                System.Resources.ResourceManager rm = new System.Resources.ResourceManager("idl2cs.res", Assembly.GetExecutingAssembly());
-                Regex find_enum = new Regex(rm.GetString("find_enum"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_typedef = new Regex(rm.GetString("find_typedef"), RegexOptions.Compiled | RegexOptions.Singleline);
-                Regex find_interface = new Regex(rm.GetString("find_interface"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_function = new Regex(rm.GetString("find_function"), RegexOptions.Compiled | RegexOptions.Multiline);
-                //Regex find_comment = new Regex(rm.GetString("find_comment"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_uuid = new Regex(rm.GetString("find_uuid"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_helpstring = new Regex(rm.GetString("find_helpstring"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_func_attr = new Regex(rm.GetString("find_func_attr"), RegexOptions.Compiled | RegexOptions.Singleline);
-                Regex find_coclass = new Regex(rm.GetString("find_coclass"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_include = new Regex(rm.GetString("find_include"), RegexOptions.Compiled | RegexOptions.Multiline);
                 MatchCollection r;
-                #endregion
                 #region Process include
-                r = find_include.Matches(idl);
-                foreach (Match m in r)
-                {
-                    try
-                    {
-                        string inc = File.ReadAllText(m.Groups["filename"].Value);
-                        if (!string.IsNullOrEmpty(inc))
-                            idl = idl.Replace(m.Captures[0].Value, inc);
-                    }
-                    catch (Exception)
-                    {
-                    }
-                }
+                while (ProcessInclude(ref idl)) { }
                 #endregion
                 #region Prepare mapping hash table
                 Dictionary<string, string> type_def_table = new Dictionary<string, string>();
@@ -229,7 +805,7 @@ namespace idl2cs
 
                 #region pre-scan interrface
                 Console.WriteLine("Pre-scan interface ...");
-                r = find_interface.Matches(idl);
+                r = find_fwd_interface.Matches(idl);
                 foreach (Match m in r)
                 {
                     string interface_name = m.Groups["name"].Value.Trim();
@@ -272,7 +848,9 @@ namespace idl2cs
                     if (!type_def_table.ContainsKey(interface_name))
                         type_def_table.Add(interface_name, "interface");
 
-                    MatchCollection rr = find_function.Matches(m.Groups["function"].Value);
+                    string interface_func = find_whole_line_comment.Replace(m.Groups["function"].Value, "");
+
+                    MatchCollection rr = find_function.Matches(interface_func);
                     foreach (Match mm in rr)
                     {
                         string func_type = mm.Groups["func_type"].Value.Trim();
@@ -283,7 +861,7 @@ namespace idl2cs
                         if (!type_mapping_table.TryGetValue(func_type, out func_native_type))
                             if (!type_def_table.TryGetValue(func_type, out func_native_type))
                             {
-                                Console.WriteLine("[warning] unable to mapping {0} to c# native type.", func_type);
+                                Console.WriteLine("[warning] unable to mapping {0} {1} to c# native type.", func_type, func_name);
                                 w.WriteLine("// idl2cs warning: unmapped type: {0}", func_type);
                             }
 
@@ -291,7 +869,7 @@ namespace idl2cs
                         {
                             if (!type_mapping_table.TryGetValue(func_native_type, out func_native_type))
                             {
-                                Console.WriteLine("[warning] unable to mapping {0} to c# native type.", func_native_type);
+                                Console.WriteLine("[warning] unable to mapping {0} {1} to c# native type.", func_native_type, func_name);
                                 w.WriteLine("// idl2cs warning: unmapped type: {0}", func_native_type);
                             }
                         }
@@ -436,8 +1014,8 @@ namespace idl2cs
                                             goto normal_final_para_type;
                                         }
                                     case 2:
-                                        if (is_out)
-                                        {
+                                        //if (is_out)
+                                        //{
                                             if (para_native_type == "interface")
                                             {
                                                 final_para += string.Format("out {0} ", para_type);
@@ -448,7 +1026,7 @@ namespace idl2cs
                                                 final_para += string.Format("out {0} ", para_native_type);
                                                 goto after_normal_final_para_type;
                                             }
-                                        }
+                                        //}
                                         Console.WriteLine("[warning] {0}/{1}** in {2}:{3}",
                                                       para_type, para_native_type,
                                                       interface_name, func_name);
