@@ -140,11 +140,17 @@
   </data>
   <data name="find_func_para1" xml:space="preserve">
     <value>\[*(?&lt;attr&gt;[^\]]*)\]*\s*(?&lt;type&gt;[\w+\s+]+)\s+(?&lt;ptr&gt;\**)(?&lt;name&gt;\w+)</value>
-  </data> 
+  </data>
   <data name="find_func_para2" xml:space="preserve">
     <value>(?&lt;type&gt;[\w+\s+]+)(?&lt;ptr&gt;\**)(?&lt;name&gt;\w+)</value>
-  </data> 
+  </data>
   <data name="find_func_attr" xml:space="preserve">
     <value>\[(?&lt;attr&gt;[^\]]+)\](?&lt;para&gt;.*)</value>
-  </data>   
+  </data>
+  <data name="find_coclass" xml:space="preserve">
+    <value>\[(?&lt;attr&gt;[^\]]+)\]\s*coclass\s+(?&lt;name&gt;[^{]+)\s*{(?&lt;declear&gt;[^}]+)};</value>
+  </data>
+  <data name="find_include" xml:space="preserve">
+    <value>#include\s+"(?&lt;filename&gt;[^"]+)"</value>
+  </data>
 </root>

@@ -61,6 +61,15 @@ namespace idl2cs {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to \[(?&lt;attr&gt;[^\]]+)\]\s*coclass\s+(?&lt;name&gt;[^{]+)\s*{(?&lt;declear&gt;[^}]+)};.
+        /// </summary>
+        internal static string find_coclass {
+            get {
+                return ResourceManager.GetString("find_coclass", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to ^/\*(?&lt;comment&gt;[^/]+)\*/.
         /// </summary>
         internal static string find_comment {
@@ -79,7 +88,34 @@ namespace idl2cs {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to (?&lt;func_type&gt;[\w+\s+]+)(?&lt;func_name&gt;\s+\w+)\s*\((?&lt;func_args&gt;[^\)]+)\)\s*;.
+        ///   Looks up a localized string similar to \[(?&lt;attr&gt;[^\]]+)\](?&lt;para&gt;.*).
+        /// </summary>
+        internal static string find_func_attr {
+            get {
+                return ResourceManager.GetString("find_func_attr", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to \[*(?&lt;attr&gt;[^\]]*)\]*\s*(?&lt;type&gt;[\w+\s+]+)\s+(?&lt;ptr&gt;\**)(?&lt;name&gt;\w+).
+        /// </summary>
+        internal static string find_func_para1 {
+            get {
+                return ResourceManager.GetString("find_func_para1", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to (?&lt;type&gt;[\w+\s+]+)(?&lt;ptr&gt;\**)(?&lt;name&gt;\w+).
+        /// </summary>
+        internal static string find_func_para2 {
+            get {
+                return ResourceManager.GetString("find_func_para2", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to (?&lt;func_type&gt;[\w+\s+]+)(?&lt;func_name&gt;\s+\w+)\s*\((?&lt;func_para&gt;[^\)]+)\)\s*;.
         /// </summary>
         internal static string find_function {
             get {
@@ -93,6 +129,15 @@ namespace idl2cs {
         internal static string find_helpstring {
             get {
                 return ResourceManager.GetString("find_helpstring", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to #include\s+&quot;(?&lt;filename&gt;[^&quot;]+)&quot;.
+        /// </summary>
+        internal static string find_include {
+            get {
+                return ResourceManager.GetString("find_include", resourceCulture);
             }
         }
         
