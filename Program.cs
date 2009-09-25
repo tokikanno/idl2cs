@@ -14,6 +14,43 @@ namespace idl2cs
 {
     class Program
     {
+        #region Load regular expression from resrouce
+        public static System.Resources.ResourceManager rm = new System.Resources.ResourceManager("idl2cs.res", Assembly.GetExecutingAssembly());
+        public static Regex find_enum = new Regex(rm.GetString("find_enum"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_typedef = new Regex(rm.GetString("find_typedef"), RegexOptions.Compiled | RegexOptions.Singleline);
+        public static Regex find_interface = new Regex(rm.GetString("find_interface"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_function = new Regex(rm.GetString("find_function"), RegexOptions.Compiled | RegexOptions.Multiline);
+        //Regex find_comment = new Regex(rm.GetString("find_comment"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_uuid = new Regex(rm.GetString("find_uuid"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_helpstring = new Regex(rm.GetString("find_helpstring"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_func_attr = new Regex(rm.GetString("find_func_attr"), RegexOptions.Compiled | RegexOptions.Singleline);
+        public static Regex find_coclass = new Regex(rm.GetString("find_coclass"), RegexOptions.Compiled | RegexOptions.Multiline);
+        public static Regex find_include = new Regex(rm.GetString("find_include"), RegexOptions.Compiled | RegexOptions.Multiline);
+        #endregion
+
+        static bool ProcessInclude(ref string org_txt)
+        {
+            Match m = find_include.Match(org_txt);
+            if (m.Success)
+            {
+                try
+                {
+                    string inc = File.ReadAllText(m.Groups["filename"].Value);
+                    if (!string.IsNullOrEmpty(inc))
+                    {
+                        while (ProcessInclude(ref inc)) { }
+                        org_txt = org_txt.Remove(m.Captures[0].Index, m.Captures[0].Length).Insert(m.Captures[0].Index, inc);
+                    }
+                }
+                catch (Exception)
+                {
+                    org_txt = org_txt.Remove(m.Captures[0].Index, m.Captures[0].Length);
+                }
+            }
+
+            return m.Success;
+        }
+
         static void Main(string[] args)
         {
             if (args.Length != 1)
@@ -39,34 +76,10 @@ namespace idl2cs
                     return;
                 }
 
-                #region Load regular expression from resrouce
-                System.Resources.ResourceManager rm = new System.Resources.ResourceManager("idl2cs.res", Assembly.GetExecutingAssembly());
-                Regex find_enum = new Regex(rm.GetString("find_enum"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_typedef = new Regex(rm.GetString("find_typedef"), RegexOptions.Compiled | RegexOptions.Singleline);
-                Regex find_interface = new Regex(rm.GetString("find_interface"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_function = new Regex(rm.GetString("find_function"), RegexOptions.Compiled | RegexOptions.Multiline);
-                //Regex find_comment = new Regex(rm.GetString("find_comment"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_uuid = new Regex(rm.GetString("find_uuid"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_helpstring = new Regex(rm.GetString("find_helpstring"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_func_attr = new Regex(rm.GetString("find_func_attr"), RegexOptions.Compiled | RegexOptions.Singleline);
-                Regex find_coclass = new Regex(rm.GetString("find_coclass"), RegexOptions.Compiled | RegexOptions.Multiline);
-                Regex find_include = new Regex(rm.GetString("find_include"), RegexOptions.Compiled | RegexOptions.Multiline);
                 MatchCollection r;
-                #endregion
+
                 #region Process include
-                r = find_include.Matches(idl);
-                foreach (Match m in r)
-                {
-                    try
-                    {
-                        string inc = File.ReadAllText(m.Groups["filename"].Value);
-                        if (!string.IsNullOrEmpty(inc))
-                            idl = idl.Replace(m.Captures[0].Value, inc);
-                    }
-                    catch (Exception)
-                    {
-                    }
-                }
+                //while (ProcessInclude(ref idl)) { }
                 #endregion
                 #region Prepare mapping hash table
                 Dictionary<string, string> type_def_table = new Dictionary<string, string>();
@@ -119,7 +132,7 @@ namespace idl2cs
                 test_enum.Members.Add(mt);
 
                 code.Types.Add(test_enum);
-#endif                
+#endif
                 r = null;
 
                 #region typedef
@@ -192,36 +205,70 @@ namespace idl2cs
 
                 #region coclass
                 Console.WriteLine("Process coclass ...");
-                r = find_coclass.Matches(idl);
+//                r = find_coclass.Matches(idl);
                 w.Write("\n#region coclass");
 
-                foreach (Match m in r)
-                {
-                    w.WriteLine();
-                    string cc_name = m.Groups["name"].Value.Trim();
-                    string cc_attr = m.Groups["attr"].Value.Trim();
-                    string cc_declear = m.Groups["declear"].Value.Trim();
-                    string cc_uuid = string.Empty;
-
-                    Console.WriteLine("\tProcess coclass {0}", cc_name);
-
-                    Match mm = null;
-                    mm = find_helpstring.Match(cc_attr);
-                    if (mm.Success)
-                        w.WriteLine("/// <summary>\n/// {0}\n/// </summary>", mm.Groups["value"].Value);
-
-                    mm = null;
-                    mm = find_uuid.Match(cc_attr);
-                    if (mm.Success)
+                   while (true)
                     {
-                        cc_uuid = mm.Groups["value"].Value;
-                        w.WriteLine(@"[ComImport, Guid(""{0}"")]", cc_uuid);
+                        Match m = find_coclass.Match(idl);
+
+                        if (!m.Success)
+                            break;
+
+                        w.WriteLine();
+                        string cc_name = m.Groups["name"].Value.Trim();
+                        string cc_attr = m.Groups["attr"].Value.Trim();
+                        string cc_declear = m.Groups["declear"].Value.Trim();
+                        string cc_uuid = string.Empty;
+
+                        Console.WriteLine("\tProcess coclass {0}", cc_name);
+
+                        Match mm = null;
+                        mm = find_helpstring.Match(cc_attr);
+                        if (mm.Success)
+                            w.WriteLine("/// <summary>\n/// {0}\n/// </summary>", mm.Groups["value"].Value);
+
+                        mm = null;
+                        mm = find_uuid.Match(cc_attr);
+                        if (mm.Success)
+                        {
+                            cc_uuid = mm.Groups["value"].Value;
+                            w.WriteLine(@"[ComImport, Guid(""{0}"")]", cc_uuid);
+                        }
+
+                        w.WriteLine("public class {0}\n{{\n/*\nidl2cs warning: edit this block for helper\n{1}\n*/\n}}", cc_name, cc_declear);
+
+                        idl = idl.Remove(m.Captures[0].Index, m.Captures[0].Length);
                     }
+    
 
-                    w.WriteLine("public class {0}\n{{\n/*\nidl2cs warning: edit this block for helper\n{1}\n*/\n}}", cc_name, cc_declear);
+                //foreach (Match m in r)
+                //{
+                //    w.WriteLine();
+                //    string cc_name = m.Groups["name"].Value.Trim();
+                //    string cc_attr = m.Groups["attr"].Value.Trim();
+                //    string cc_declear = m.Groups["declear"].Value.Trim();
+                //    string cc_uuid = string.Empty;
 
-                    idl = idl.Remove(m.Captures[0].Index, m.Captures[0].Length);
-                }
+                //    Console.WriteLine("\tProcess coclass {0}", cc_name);
+
+                //    Match mm = null;
+                //    mm = find_helpstring.Match(cc_attr);
+                //    if (mm.Success)
+                //        w.WriteLine("/// <summary>\n/// {0}\n/// </summary>", mm.Groups["value"].Value);
+
+                //    mm = null;
+                //    mm = find_uuid.Match(cc_attr);
+                //    if (mm.Success)
+                //    {
+                //        cc_uuid = mm.Groups["value"].Value;
+                //        w.WriteLine(@"[ComImport, Guid(""{0}"")]", cc_uuid);
+                //    }
+
+                //    w.WriteLine("public class {0}\n{{\n/*\nidl2cs warning: edit this block for helper\n{1}\n*/\n}}", cc_name, cc_declear);
+
+                //    idl = idl.Remove(m.Captures[0].Index, m.Captures[0].Length);
+                //}
 
                 w.WriteLine("#endregion");
                 Console.WriteLine("Total {0} coclass processed.", r.Count);
@@ -264,7 +311,7 @@ namespace idl2cs
                     w.WriteLine();
                     w.WriteLine("/// <summary>\n/// {0}\n/// </summary>", helpstring.Groups["value"].Value);
                     w.WriteLine(@"[ComImport, Guid(""{0}""), InterfaceType(ComInterfaceType.{1})]", uuid.Groups["value"].Value, interface_comtype);
-                    if (interface_type=="IUnknown" || interface_type == "IDispatch")
+                    if (interface_type == "IUnknown" || interface_type == "IDispatch")
                         w.WriteLine("public interface {0}\n{{", interface_name);
                     else
                         w.WriteLine("public interface {0} : {1}\n{{", interface_name, interface_type);
@@ -362,7 +409,7 @@ namespace idl2cs
 
                                     if (para_ptr_count != 0)
                                     {
-                                        para_type = para_type.Substring(0, para_type.Length-para_ptr_count);
+                                        para_type = para_type.Substring(0, para_type.Length - para_ptr_count);
                                     }
                                 }
 
